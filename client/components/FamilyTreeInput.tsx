@@ -3,7 +3,7 @@ import { View, StyleSheet, Pressable, TextInput, Text } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "./ThemedText";
 import { useTheme } from "@/hooks/useTheme";
-import { Colors, Spacing, BorderRadius, Typography } from "@/constants/theme";
+import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 import type { FamilyTreeData, FamilyMember } from "@/models/types";
 
 interface Props {
@@ -25,7 +25,7 @@ const RELATIONS = [
 ];
 
 export function FamilyTreeInput({ value, onChange }: Props) {
-  const { theme } = useTheme();
+  const { theme: colors } = useTheme();
   const [newName, setNewName] = useState("");
   const [newRelation, setNewRelation] = useState(RELATIONS[0]);
   const [showAncestral, setShowAncestral] = useState(false);
@@ -77,8 +77,6 @@ export function FamilyTreeInput({ value, onChange }: Props) {
       ancestralSurnames: value.ancestralSurnames.filter((_, i) => i !== idx),
     });
   };
-
-  const colors = Colors[theme];
 
   return (
     <View style={styles.container}>
