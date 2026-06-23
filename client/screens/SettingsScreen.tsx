@@ -1,5 +1,5 @@
 import React from "react";
-import { View, StyleSheet, ScrollView, Pressable, Switch } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Switch, Alert } from "react-native";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation, CompositeNavigationProp } from "@react-navigation/native";
@@ -30,10 +30,29 @@ export default function SettingsScreen() {
     setIncludeNeutral,
     dailyLimits,
     buckets,
+    resetAllData,
   } = useAppState();
 
   const handleUpgrade = () => {
     navigation.navigate("Paywall");
+  };
+
+  const handleStartOver = () => {
+    Alert.alert(
+      "Start Over",
+      "This will clear all your saved names and preferences. Are you sure?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Start Over",
+          style: "destructive",
+          onPress: () => {
+            resetAllData();
+            navigation.reset({ index: 0, routes: [{ name: "Welcome" }] });
+          },
+        },
+      ]
+    );
   };
 
   const totalSavedNames = buckets.yes.length + buckets.maybe.length + buckets.no.length;
@@ -120,6 +139,18 @@ export default function SettingsScreen() {
               thumbColor={theme.surface}
             />
           </View>
+        </View>
+
+        <View style={[styles.section, { backgroundColor: theme.surface }]}>
+          <ThemedText type="label" style={styles.sectionTitle}>
+            Reset
+          </ThemedText>
+          <Pressable style={styles.dangerRow} onPress={handleStartOver}>
+            <Feather name="refresh-ccw" size={18} color={Colors.light.no} />
+            <ThemedText type="body" style={{ color: Colors.light.no, marginLeft: Spacing.sm }}>
+              Start Over
+            </ThemedText>
+          </Pressable>
         </View>
 
         <View style={styles.footer}>
