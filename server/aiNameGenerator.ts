@@ -16,7 +16,12 @@ import type { AIGenerationRequest, NameRecord, QuestionnaireAnswers, FamilyTreeD
 // ============================================================
 
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || "glm-4.7-flash";
-const DEFAULT_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.z.ai/api/openai/v1";
+const DEFAULT_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.z.ai/api/paas/v4";
+
+// Retry config for Z.ai free-tier rate limiting (429s are common)
+const MAX_RETRIES = 5;
+const INITIAL_BACKOFF_MS = 2000; // start at 2s
+const REQUEST_TIMEOUT_MS = 30000; // 30s per attempt
 
 export function buildPrompt(req: AIGenerationRequest): { system: string; user: string } {
   const a = req.answers;
@@ -171,52 +176,84 @@ export async function generateNamesWithAI(req: AIGenerationRequest): Promise<{ n
 
   const { system, user } = buildPrompt(req);
 
-  try {
-    const response = await fetch(`${DEFAULT_BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: DEFAULT_MODEL,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-        temperature: 0.8,
-        max_tokens: 8000,
-        response_format: { type: "json_object" },
-      }),
-    });
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetch(`${DEFAULT_BASE_URL}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: DEFAULT_MODEL,
+          messages: [
+            { role: "system", content: system },
+            { role: "user", content: user },
+          ],
+          temperature: 0.8,
+          max_tokens: 8000,
+          response_format: { type: "json_object" },
+        }),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error(`[NameNest] LLM API error ${response.status}: ${errText}`);
+      // Retry on 429 (rate limit) or 5xx (server error)
+      if (response.status === 429 || response.status >= 500) {
+        const backoff = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
+        console.warn(`[NameNest] LLM API ${response.status} on attempt ${attempt + 1}/${MAX_RETRIES + 1}, retrying in ${backoff}ms...`);
+        if (attempt < MAX_RETRIES) {
+          await sleep(backoff);
+          continue;
+        }
+        console.error(`[NameNest] LLM API rate-limited after ${MAX_RETRIES + 1} attempts, giving up`);
+        return { names: [], provider: DEFAULT_MODEL, fallback: true };
+      }
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error(`[NameNest] LLM API error ${response.status}: ${errText}`);
+        return { names: [], provider: DEFAULT_MODEL, fallback: true };
+      }
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content;
+
+      if (!content) {
+        console.error("[NameNest] Empty LLM response");
+        return { names: [], provider: DEFAULT_MODEL, fallback: true };
+      }
+
+      const names = parseLLMResponse(content);
+
+      if (names.length === 0) {
+        console.error("[NameNest] No names parsed from LLM response");
+        return { names: [], provider: DEFAULT_MODEL, fallback: true };
+      }
+
+      if (attempt > 0) {
+        console.log(`[NameNest] LLM call succeeded on attempt ${attempt + 1}`);
+      }
+
+      return { names, provider: DEFAULT_MODEL, fallback: false };
+
+    } catch (err) {
+      // Network errors, timeouts — retry with backoff
+      if (attempt < MAX_RETRIES) {
+        const backoff = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
+        console.warn(`[NameNest] Request failed on attempt ${attempt + 1}/${MAX_RETRIES + 1}, retrying in ${backoff}ms...`, err instanceof Error ? err.message : err);
+        await sleep(backoff);
+        continue;
+      }
+      console.error("[NameNest] AI generation failed after all retries:", err);
       return { names: [], provider: DEFAULT_MODEL, fallback: true };
     }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
-
-    if (!content) {
-      console.error("[NameNest] Empty LLM response");
-      return { names: [], provider: DEFAULT_MODEL, fallback: true };
-    }
-
-    const names = parseLLMResponse(content);
-
-    if (names.length === 0) {
-      console.error("[NameNest] No names parsed from LLM response");
-      return { names: [], provider: DEFAULT_MODEL, fallback: true };
-    }
-
-    return { names, provider: DEFAULT_MODEL, fallback: false };
-
-  } catch (err) {
-    console.error("[NameNest] AI generation failed:", err);
-    return { names: [], provider: DEFAULT_MODEL, fallback: true };
   }
+
+  return { names: [], provider: DEFAULT_MODEL, fallback: true };
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function parseLLMResponse(content: string): NameRecord[] {
