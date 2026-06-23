@@ -1,0 +1,11 @@
+node_modules/
+.expo/
+dist/
+web-build/
+server_dist/
+static-build/
+.DS_Store
+*.log
+.env
+.env.local
+*.tsbuildinfo

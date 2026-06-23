@@ -1,0 +1,16 @@
+run = "npm run dev"
+
+entrypoint = "server/index.ts"
+
+[nix]
+channel = "stable-23_11"
+
+[deployment]
+run = ["sh", "-c", "npm run server:prod"]
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[env]
+PORT = "5000"
