@@ -233,11 +233,13 @@ function setupErrorHandler(app: express.Application) {
   setupErrorHandler(app);
 
   const port = parseInt(process.env.PORT || "5000", 10);
+  const isMac = process.platform === "darwin";
   server.listen(
     {
       port,
-      host: "0.0.0.0",
-      reusePort: true,
+      host: isMac ? "localhost" : "0.0.0.0",
+      // reusePort is not supported on macOS and causes ENOTSUP
+      ...(isMac ? {} : { reusePort: true }),
     },
     () => {
       log(`express server serving on port ${port}`);
