@@ -229,11 +229,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   memberName: {
-    fontSize: Typography.sizes.body,
+    fontSize: Typography.body.fontSize,
     fontWeight: "600",
   },
   memberRelation: {
-    fontSize: Typography.sizes.caption,
+    fontSize: Typography.caption.fontSize,
     marginTop: 2,
   },
   removeBtn: {
@@ -250,7 +250,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm + 2,
-    fontSize: Typography.sizes.body,
+    fontSize: Typography.body.fontSize,
   },
   notesInput: {
     minHeight: 70,
@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   relationChipText: {
-    fontSize: Typography.sizes.caption,
+    fontSize: Typography.caption.fontSize,
   },
   addBtn: {
     paddingVertical: Spacing.sm + 2,
@@ -278,7 +278,7 @@ const styles = StyleSheet.create({
   addBtnText: {
     color: "#fff",
     fontWeight: "600",
-    fontSize: Typography.sizes.body,
+    fontSize: Typography.body.fontSize,
   },
   sectionToggle: {
     flexDirection: "row",
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
   },
   sectionToggleText: {
-    fontSize: Typography.sizes.body,
+    fontSize: Typography.body.fontSize,
     fontWeight: "600",
   },
   chipRow: {
@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
     borderRadius: 100,
   },
   chipText: {
-    fontSize: Typography.sizes.caption,
+    fontSize: Typography.caption.fontSize,
   },
   inlineInput: {
     flexDirection: "row",
