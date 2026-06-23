@@ -11,12 +11,12 @@ import type { AIGenerationRequest, NameRecord, QuestionnaireAnswers, FamilyTreeD
 //
 // Env vars:
 //   OPENAI_API_KEY  - API key for the LLM provider
-//   OPENAI_BASE_URL - Base URL (default: https://api.openai.com/v1)
-//   OPENAI_MODEL    - Model name (default: gpt-4o)
+//   OPENAI_BASE_URL - Base URL (default: Z.ai OpenAI-compatible endpoint)
+//   OPENAI_MODEL    - Model name (default: glm-4.7-flash, free on Z.ai)
 // ============================================================
 
-const DEFAULT_MODEL = process.env.OPENAI_MODEL || "gpt-4o";
-const DEFAULT_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
+const DEFAULT_MODEL = process.env.OPENAI_MODEL || "glm-4.7-flash";
+const DEFAULT_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.z.ai/api/openai/v1";
 
 export function buildPrompt(req: AIGenerationRequest): { system: string; user: string } {
   const a = req.answers;

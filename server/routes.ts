@@ -59,7 +59,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({
       status: "ok",
       aiEnabled: !!process.env.OPENAI_API_KEY,
-      model: process.env.OPENAI_MODEL || "gpt-4o",
+      model: process.env.OPENAI_MODEL || "glm-4.7-flash",
     });
   });
 

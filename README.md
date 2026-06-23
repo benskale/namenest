@@ -22,8 +22,8 @@ AI-powered baby name discovery app. Deep questionnaire + family tree + AI-driven
 |----------|----------|-------------|
 | `DATABASE_URL` | Yes | PostgreSQL connection string |
 | `OPENAI_API_KEY` | Recommended | Enables AI name generation (falls back to static without) |
-| `OPENAI_MODEL` | Optional | Model name (default: `gpt-4o`) |
-| `OPENAI_BASE_URL` | Optional | Custom endpoint (default: OpenAI) |
+| `OPENAI_MODEL` | Optional | Model name (default: `glm-4.7-flash`, free on Z.ai) |
+| `OPENAI_BASE_URL` | Optional | Custom endpoint (default: Z.ai OpenAI-compatible) |
 | `EXPO_PUBLIC_DOMAIN` | Optional | For mobile dev |
 
 ## Features
