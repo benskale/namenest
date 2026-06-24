@@ -8,6 +8,8 @@ import {
   Switch,
   Dimensions,
   ActivityIndicator,
+  Modal,
+  FlatList,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -27,6 +29,7 @@ import { useAppState } from "@/hooks/useAppState";
 import { Colors, Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { questions, questionCategories } from "@/data/questions";
 import { culturesByContinent, continentLabels, CultureOption } from "@/data/cultures";
+import { TEST_PROFILES, TestProfile } from "@/data/testProfiles";
 import {
   Question,
   QuestionnaireAnswers,
@@ -48,6 +51,8 @@ export default function QuestionnaireScreen({ navigation }: Props) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setLocalAnswers] = useState<QuestionnaireAnswers>({});
   const [isGenerating, setIsGenerating] = useState(false);
+  const [showQuickFill, setShowQuickFill] = useState(false);
+  const [activeProfileId, setActiveProfileId] = useState<string | undefined>(undefined);
 
   const visibleQuestions = useMemo(() => {
     return questions.filter((q) => {
@@ -134,6 +139,29 @@ export default function QuestionnaireScreen({ navigation }: Props) {
       [currentQuestion.id]: value,
     }));
   }, [currentQuestion?.id]);
+
+  const handleQuickFill = useCallback((profile: TestProfile) => {
+    const filled = {
+      ...profile.answers,
+      _testProfileId: profile.id,
+      _testProfileLabel: profile.label,
+    };
+    setLocalAnswers(filled as QuestionnaireAnswers);
+    setActiveProfileId(profile.id);
+    setShowQuickFill(false);
+    // Jump to the last visible question
+    const filledQuestions = questions.filter((q) => {
+      if (!q.dependsOn) return true;
+      const depValue = (filled as any)[q.dependsOn.questionId];
+      if (q.dependsOn.hasAnyValue) {
+        if (Array.isArray(depValue)) return depValue.length > 0;
+        return !!depValue;
+      }
+      if (Array.isArray(q.dependsOn.value)) return q.dependsOn.value.includes(depValue as string);
+      return depValue === q.dependsOn.value;
+    });
+    setCurrentIndex(filledQuestions.length - 1);
+  }, []);
 
   const handleOptionSelect = useCallback((value: string) => {
     if (currentQuestion.type === "singleSelect") {
@@ -349,6 +377,58 @@ export default function QuestionnaireScreen({ navigation }: Props) {
         </View>
         <ProgressBar progress={progress} />
       </View>
+
+      {/* Dev-only Quick Fill bar */}
+      <View style={styles.quickFillBar}>
+        <Pressable
+          style={[
+            styles.quickFillButton,
+            activeProfileId ? styles.quickFillButtonActive : null,
+          ]}
+          onPress={() => setShowQuickFill(true)}
+        >
+          <ThemedText type="caption" style={styles.quickFillText}>
+            {activeProfileId
+              ? TEST_PROFILES.find((p) => p.id === activeProfileId)?.label
+              : "⚡ Quick Fill (dev)"}
+          </ThemedText>
+        </Pressable>
+      </View>
+
+      <Modal visible={showQuickFill} animationType="slide" transparent={true} onRequestClose={() => setShowQuickFill(false)}>
+        <View style={styles.quickFillModalOverlay}>
+          <View style={[styles.quickFillModalContent, { backgroundColor: theme.backgroundDefault }]}>
+            <View style={styles.quickFillModalHeader}>
+              <ThemedText type="h2">Quick Fill Test Profiles</ThemedText>
+              <Pressable onPress={() => setShowQuickFill(false)}>
+                <Feather name="x" size={24} color={theme.text} />
+              </Pressable>
+            </View>
+            <ThemedText type="caption" style={[styles.quickFillSubtitle, { color: theme.textSecondary }]}>
+              Select a profile to auto-fill the entire questionnaire
+            </ThemedText>
+            <FlatList
+              data={TEST_PROFILES}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <Pressable
+                  style={[
+                    styles.profileCard,
+                    activeProfileId === item.id ? styles.profileCardActive : null,
+                  ]}
+                  onPress={() => handleQuickFill(item)}
+                >
+                  <ThemedText type="body" style={styles.profileLabel}>{item.label}</ThemedText>
+                  <ThemedText type="caption" style={[styles.profileDesc, { color: theme.textSecondary }]}>
+                    {item.description}
+                  </ThemedText>
+                </Pressable>
+              )}
+              style={{ maxHeight: 400 }}
+            />
+          </View>
+        </View>
+      </Modal>
 
       <ScrollView
         contentContainerStyle={styles.content}
@@ -683,5 +763,68 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
     fontSize: 12,
     fontWeight: "600",
+  },
+  // === Quick Fill (dev) styles ===
+  quickFillBar: {
+    flexDirection: "row",
+    justifyContent: "center",
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.lg,
+  },
+  quickFillButton: {
+    backgroundColor: "#f0e6f6",
+    borderWidth: 1,
+    borderColor: "#d1a3e8",
+    borderRadius: BorderRadius.full,
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.lg,
+  },
+  quickFillButtonActive: {
+    backgroundColor: "#e1bee7",
+    borderColor: "#8e24aa",
+  },
+  quickFillText: {
+    color: "#6a1b9a",
+    fontWeight: "600",
+  },
+  quickFillModalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
+    padding: Spacing.xl,
+  },
+  quickFillModalContent: {
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.xl,
+    width: "100%",
+    maxWidth: 500,
+  },
+  quickFillModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: Spacing.xs,
+  },
+  quickFillSubtitle: {
+    marginBottom: Spacing.lg,
+  },
+  profileCard: {
+    borderWidth: 1.5,
+    borderColor: "#e0e0e0",
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  profileCardActive: {
+    borderColor: "#8e24aa",
+    backgroundColor: "#f3e5f5",
+  },
+  profileLabel: {
+    fontWeight: "700",
+    marginBottom: 2,
+  },
+  profileDesc: {
+    fontSize: 12,
   },
 });
