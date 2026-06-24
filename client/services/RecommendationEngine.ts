@@ -8,6 +8,7 @@ import {
   AIGenerationResponse,
   AIGenerationRequest,
 } from "@/models/types";
+import { getApiUrl } from "@/lib/query-client";
 
 // ============================================================
 // Name Recommendation Engine
@@ -24,7 +25,7 @@ export async function generateDeckAI(
   bonusCards: number = 0
 ): Promise<{ names: NameRecord[]; isFallback: boolean; provider: string }> {
   try {
-    const response = await fetch("/api/generate-names", {
+    const response = await fetch(`${getApiUrl()}api/generate-names`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
