@@ -21,7 +21,10 @@ const DEFAULT_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.z.ai/api/pa
 // Retry config for Z.ai free-tier rate limiting (429s are common)
 const MAX_RETRIES = 5;
 const INITIAL_BACKOFF_MS = 2000; // start at 2s
-const REQUEST_TIMEOUT_MS = 30000; // 30s per attempt
+const REQUEST_TIMEOUT_MS = 45000; // 45s per attempt (batch generation needs more time)
+
+// Batch size — smaller batches = more thought per name = higher quality
+const BATCH_SIZE = 10;
 
 export function buildPrompt(req: AIGenerationRequest): { system: string; user: string } {
   const a = req.answers;
@@ -134,35 +137,69 @@ export function buildPrompt(req: AIGenerationRequest): { system: string; user: s
   if (fmtArray("popCulture").length) sections.push(`Pop culture refs: ${fmtArray("popCulture").join(", ")}`);
   if (fmt("anythingElse")) sections.push(`Additional notes: ${fmt("anythingElse")}`);
 
-  const excludeStr = req.excludeNames && req.excludeNames.length > 0
-    ? `\n\nDo NOT include these names (already seen): ${req.excludeNames.join(", ")}.`
+  // Merge excludeNames (passed-in) with any from the request
+  const allExcludes = [...(req.excludeNames || [])];
+  const excludeStr = allExcludes.length > 0
+    ? `\n\nDo NOT include these names (already shown): ${allExcludes.join(", ")}. Each name must be completely different from these.`
     : "";
 
-  const system = `You are NameNest, an expert baby name consultant with deep knowledge of names from every culture, language, and tradition worldwide. You understand the emotional weight of naming a child and the nuance of family heritage.
+  const system = `You are NameNest, an elite baby name consultant trusted by discerning parents worldwide. You have encyclopedic knowledge of names from every culture, language, and tradition, including their etymology, historical usage, literary associations, and cultural nuance.
 
-Your job: generate ${count} deeply personalized baby name suggestions based on the parent's detailed preferences and family history. Each name must feel like it was chosen by a thoughtful human expert, not a random generator.
+You are generating ${count} name suggestions for a specific family. Quality over quantity. Every single name should feel handpicked by a human expert who deeply understood this family's story.
 
-Return a JSON array of name objects. Each object must have:
-- "name": the name (string)
-- "gender": "boy", "girl", or "neutral"
-- "origins": array of origin strings (e.g., ["Irish", "Gaelic"])
-- "languages": array of language strings
-- "meaning": a rich, specific meaning (not just "strong warrior" - tell the story)
-- "meaningKeywords": array of keyword strings
-- "religionTags": array (empty if none)
-- "vibes": array of vibe strings from: classic, modern, vintage, nature, strong, soft, whimsical, regal, mythic, minimalist, international, romantic, quirky, literary, bohemian
-- "syllables": number
-- "variants": array of variant/related names
-- "nicknames": array of common nicknames
-- "popularityTier": 1-5 (1=very popular, 5=very rare)
-- "pronunciationHint": simple phonetic guide
-- "why": a personalized 1-2 sentence explanation of WHY this name fits THIS family, referencing their specific answers
+## CRITICAL QUALITY RULES
 
-Be creative but grounded. Honor heritage requests faithfully. If they want to honor a family member, suggest names with genuine connections. Vary origins, lengths, and styles across the batch. Avoid duplicates and names on the blocklist.
+1. AVOID GENERIC NAMES. Do not default to the top 50 baby names (no Olivia, Emma, Liam, Noah, Ava, etc.) unless the parents explicitly asked for popular names. Dig deeper. Find names with real character.
+2. RESPECT HERITAGE. If they specified cultures or regions, at least 40% of names should have genuine roots in those cultures. Research real names from those traditions.
+3. HONOR FAMILY THOUGHTFULLY. If they want to honor a relative, don't just suggest the exact name - find names that share roots, meanings, sounds, or first letters.
+4. DIVERSIFY. No two names should share the same origin, starting letter, or ending sound. Spread across origins, lengths, and popularity tiers.
+5. MATCH THE VIBE. If they asked for unique/rare names, don't give them common ones. If they asked for classic, don't give trendy. Read their preferences carefully.
+6. REAL MEANINGS. Provide accurate, specific etymological meanings. Not just "strong" or "beautiful" - give the actual linguistic root and what it meant to the people who first used it.
+7. PERSONALIZE THE WHY. The "why" field must reference THIS family's specific answers. Not "this is a strong name" but "this echoes your love of Irish heritage and your grandmother's name Bridget."
 
-Return ONLY the JSON array, no other text.`;
+## OUTPUT FORMAT
 
-  const user = `Here is the family's naming profile:\n\n${sections.join("\n")}${excludeStr}\n\nGenerate ${count} personalized name suggestions now.`;
+Return a JSON object with a "names" array. Each object:
+{
+  "name": "the name",
+  "gender": "boy" | "girl" | "neutral",
+  "origins": ["Irish", "Gaelic"],
+  "languages": ["Irish", "English"],
+  "meaning": "Rich, specific meaning with linguistic root and story",
+  "meaningKeywords": ["keyword1", "keyword2"],
+  "religionTags": [],
+  "vibes": ["classic", "strong"],
+  "syllables": 2,
+  "variants": ["related", "names"],
+  "nicknames": ["nick", "names"],
+  "popularityTier": 1-5,
+  "pronunciationHint": "phonetic guide",
+  "why": "1-2 sentences referencing THIS family's specific answers"
+}
+
+## EXAMPLE (this is the quality bar):
+
+For a family wanting Irish heritage, nature themes, and uncommon names:
+{
+  "name": "Saoirse",
+  "gender": "girl",
+  "origins": ["Irish"],
+  "languages": ["Irish", "English"],
+  "meaning": "From the Irish word for 'freedom' or 'liberty' - became popular as a name during Ireland's independence movement, symbolizing the spirit of a free nation",
+  "meaningKeywords": ["freedom", "independence", "liberty", "Irish"],
+  "religionTags": [],
+  "vibes": ["classic", "strong", "international"],
+  "syllables": 2,
+  "variants": ["Searsy", "Saoirsa"],
+  "nicknames": ["Sasha", "Sair"],
+  "popularityTier": 4,
+  "pronunciationHint": "SEER-sha",
+  "why": "A deeply Irish name that embodies your connection to Irish heritage, with a meaning (freedom) that resonates with the natural, untamed spirit you want for your daughter."
+}
+
+Return ONLY a JSON object: { "names": [...] }. No other text.`;
+
+  const user = `Here is the family's naming profile:\n\n${sections.join("\n")}${excludeStr}\n\nGenerate ${count} exceptional, deeply personalized name suggestions. Every name should feel like it was chosen specifically for THIS family.`;
 
   return { system, user };
 }
@@ -174,6 +211,62 @@ export async function generateNamesWithAI(req: AIGenerationRequest): Promise<{ n
     return { names: [], provider: "none", fallback: true };
   }
 
+  const totalCount = req.count || (req.isPremium ? 75 : 25);
+  const batches: number[] = [];
+  for (let i = 0; i < totalCount; i += BATCH_SIZE) {
+    batches.push(Math.min(BATCH_SIZE, totalCount - i));
+  }
+
+  console.log(`[NameNest] Generating ${totalCount} names in ${batches.length} batch(es) of ~${BATCH_SIZE}`);
+
+  const allNames: NameRecord[] = [];
+  const seenNames = new Set<string>(req.excludeNames?.map(n => n.toLowerCase()) || []);
+
+  for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
+    const batchCount = batches[batchIdx];
+    const batchReq: AIGenerationRequest = {
+      ...req,
+      count: batchCount,
+      excludeNames: Array.from(seenNames),
+    };
+
+    console.log(`[NameNest] Batch ${batchIdx + 1}/${batches.length}: requesting ${batchCount} names (excluding ${seenNames.size} already generated)`);
+
+    const batchNames = await callLLM(batchReq);
+
+    if (batchNames.length === 0) {
+      console.warn(`[NameNest] Batch ${batchIdx + 1} returned 0 names`);
+      if (batchIdx === 0) {
+        // First batch failed entirely — return fallback
+        return { names: [], provider: DEFAULT_MODEL, fallback: true };
+      }
+      // Subsequent batch failed — return what we have so far
+      break;
+    }
+
+    // Deduplicate within and across batches
+    for (const name of batchNames) {
+      const lower = name.name.toLowerCase();
+      if (!seenNames.has(lower)) {
+        seenNames.add(lower);
+        allNames.push(name);
+      }
+    }
+
+    console.log(`[NameNest] Batch ${batchIdx + 1} complete: ${batchNames.length} received, ${allNames.length} total unique names`);
+  }
+
+  if (allNames.length === 0) {
+    return { names: [], provider: DEFAULT_MODEL, fallback: true };
+  }
+
+  return { names: allNames, provider: DEFAULT_MODEL, fallback: false };
+}
+
+/**
+ * Makes a single LLM API call with retry logic for rate limiting.
+ */
+async function callLLM(req: AIGenerationRequest): Promise<NameRecord[]> {
   const { system, user } = buildPrompt(req);
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -182,7 +275,7 @@ export async function generateNamesWithAI(req: AIGenerationRequest): Promise<{ n
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`,
+          "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
         },
         body: JSON.stringify({
           model: DEFAULT_MODEL,
@@ -190,8 +283,8 @@ export async function generateNamesWithAI(req: AIGenerationRequest): Promise<{ n
             { role: "system", content: system },
             { role: "user", content: user },
           ],
-          temperature: 0.8,
-          max_tokens: 8000,
+          temperature: 0.75,
+          max_tokens: 6000,
           response_format: { type: "json_object" },
         }),
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -206,13 +299,13 @@ export async function generateNamesWithAI(req: AIGenerationRequest): Promise<{ n
           continue;
         }
         console.error(`[NameNest] LLM API rate-limited after ${MAX_RETRIES + 1} attempts, giving up`);
-        return { names: [], provider: DEFAULT_MODEL, fallback: true };
+        return [];
       }
 
       if (!response.ok) {
         const errText = await response.text();
         console.error(`[NameNest] LLM API error ${response.status}: ${errText}`);
-        return { names: [], provider: DEFAULT_MODEL, fallback: true };
+        return [];
       }
 
       const data = await response.json();
@@ -220,21 +313,21 @@ export async function generateNamesWithAI(req: AIGenerationRequest): Promise<{ n
 
       if (!content) {
         console.error("[NameNest] Empty LLM response");
-        return { names: [], provider: DEFAULT_MODEL, fallback: true };
+        return [];
       }
 
       const names = parseLLMResponse(content);
 
       if (names.length === 0) {
         console.error("[NameNest] No names parsed from LLM response");
-        return { names: [], provider: DEFAULT_MODEL, fallback: true };
+        return [];
       }
 
       if (attempt > 0) {
         console.log(`[NameNest] LLM call succeeded on attempt ${attempt + 1}`);
       }
 
-      return { names, provider: DEFAULT_MODEL, fallback: false };
+      return names;
 
     } catch (err) {
       // Network errors, timeouts — retry with backoff
@@ -245,11 +338,11 @@ export async function generateNamesWithAI(req: AIGenerationRequest): Promise<{ n
         continue;
       }
       console.error("[NameNest] AI generation failed after all retries:", err);
-      return { names: [], provider: DEFAULT_MODEL, fallback: true };
+      return [];
     }
   }
 
-  return { names: [], provider: DEFAULT_MODEL, fallback: true };
+  return [];
 }
 
 function sleep(ms: number): Promise<void> {
