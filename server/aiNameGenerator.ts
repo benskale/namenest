@@ -18,6 +18,112 @@ import type { AIGenerationRequest, NameRecord, QuestionnaireAnswers, FamilyTreeD
 const DEFAULT_MODEL = process.env.OPENAI_MODEL || "glm-4.7-flash";
 const DEFAULT_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.z.ai/api/paas/v4";
 
+// Expand broad regions into specific countries/cultures so the LLM
+// doesn't default to just the "obvious" few and miss proud smaller heritages.
+const REGION_EXPANSION: Record<string, string[]> = {
+  europe: [
+    "Irish", "Scottish", "Welsh", "English", "French", "German", "Austrian", "Swiss",
+    "Italian", "Spanish", "Portuguese", "Dutch", "Belgian", "Danish", "Swedish",
+    "Norwegian", "Finnish", "Icelandic", "Polish", "Czech", "Slovak", "Hungarian",
+    "Romanian", "Bulgarian", "Greek", "Croatian", "Serbian", "Slovenian", "Bosnian",
+    "Albanian", "Lithuanian", "Latvian", "Estonian", "Ukrainian", "Russian",
+    "Basque", "Catalan", "Galician", "Maltese", "Cypriot",
+  ],
+  asia: [
+    "Chinese", "Japanese", "Korean", "Vietnamese", "Thai", "Cambodian", "Lao",
+    "Burmese", "Filipino", "Indonesian", "Malay", "Indian", "Pakistani",
+    "Bangladeshi", "Sri Lankan", "Nepali", "Tibetan", "Mongolian", "Kazakh",
+    "Persian", "Afghan", "Armenian", "Georgian", "Azerbaijani", "Turkish",
+    "Lebanese", "Syrian", "Jordanian", "Palestinian", "Israeli", "Iraqi",
+    "Yemeni", "Saudi", "Kurdish", "Assyrian",
+  ],
+  africa: [
+    "Nigerian", "Ghanaian", "Ethiopian", "Kenyan", "South African", "Egyptian",
+    "Moroccan", "Algerian", "Tunisian", "Libyan", "Sudanese", "Eritrean",
+    "Somali", "Tanzanian", "Ugandan", "Zimbabwean", "Zambian", "Senegalese",
+    "Malian", "Cameroonian", "Congolese", "Ivorian", "Mozambican", "Rwandan",
+    "Madagascan", "Swahili", "Yoruba", "Igbo", "Hausa", "Amharic", "Wolof",
+    "Akan", "Zulu", "Xhosa", "Shona", "Akan", "Tigrinya",
+  ],
+  americas: [
+    "American", "Canadian", "Mexican", "Cuban", "Dominican", "Puerto Rican",
+    "Jamaican", "Haitian", "Trinidadian", "Barbadian", "Bahamian", "Guatemalan",
+    "Honduran", "Nicaraguan", "Costa Rican", "Panamanian", "Salvadoran",
+    "Colombian", "Venezuelan", "Ecuadorian", "Peruvian", "Bolivian", "Brazilian",
+    "Paraguayan", "Uruguayan", "Argentinean", "Chilean", "Indigenous American",
+    "Native American", "Quechua", "Maya", "Nahuatl", "Garifuna", "Creole",
+  ],
+  oceania: [
+    "Australian", "New Zealand", "Maori", "Hawaiian", "Samoan", "Tongan",
+    "Fijian", "Tahitian", "Marshallese", "Palauan", "Guamanian", "Niuean",
+    "Cook Island Maori", "Aboriginal Australian", "Torres Strait Islander",
+  ],
+  "middle east": [
+    "Arab", "Persian", "Turkish", "Israeli", "Lebanese", "Egyptian", "Jordanian",
+    "Syrian", "Iraqi", "Saudi", "Yemeni", "Kuwaiti", "Qatari", "Emirati",
+    "Omani", "Bahraini", "Palestinian", "Kurdish", "Armenian", "Assyrian",
+    "Druze", "Coptic", "Maronite",
+  ],
+  caribbean: [
+    "Jamaican", "Haitian", "Cuban", "Dominican", "Puerto Rican", "Trinidadian",
+    "Barbadian", "Bahamian", "Grenadian", "Saint Lucian", "Antiguan",
+    "Dominican Creole", "Garifuna", "Indo-Caribbean", "Creole",
+  ],
+};
+
+/**
+ * Expands any broad region names found in the input array into their
+ * constituent countries/cultures, merged with whatever specific cultures
+ * were already listed.
+ */
+function expandRegions(regions: string[]): string {
+  const lower = regions.map(r => r.toLowerCase().trim());
+  const specific: string[] = [];
+  const expanded: Set<string> = new Set();
+  let matched = false;
+
+  for (const r of lower) {
+    const countries = REGION_EXPANSION[r];
+    if (countries) {
+      matched = true;
+      countries.forEach(c => expanded.add(c));
+    } else {
+      specific.push(r);
+    }
+  }
+
+  if (!matched) return regions.join(", ");
+
+  // Merge — specific cultures first (user explicitly chose them),
+  // then all expanded countries from the region(s).
+  const all = [...specific, ...Array.from(expanded)];
+  return all.join(", ");
+}
+
+// Faith-specific naming guidance so the LLM layers in religious tradition properly
+const FAITH_GUIDANCE: Record<string, string> = {
+  christian: "Draw from biblical names (Old and New Testament), saints, martyrs, popes, and Christian virtues. Include names from Catholic, Orthodox, and Protestant traditions. Consider patron saints, archangels (Michael, Gabriel, Raphael), and names from Christian hymns/literature.",
+  catholic: "Draw from Catholic saints, popes, blesseds, biblical figures, and Catholic virtues. Consider confirmation names, names of Marian apparitions (Lourdes, Fatima, Guadalupe), and Catholic liturgical traditions. Latin and Italian saint names are deeply rooted here.",
+  jewish: "Draw from Hebrew Bible (Torah, Nevi'im, Ketuvim), Talmudic sages, and Jewish history. Include both Ashkenazi and Sephardic naming traditions, Yiddish names, Ladino names, and modern Israeli Hebrew names. Consider honoring deceased relatives (Ashkenazi tradition) or living relatives (Sephardic tradition).",
+  muslim: "Draw from the Quran, Hadith, names of prophets (Anbiya), companions of the Prophet (Sahaba), and Islamic history. Include Arabic, Persian, Turkish, and other Muslim-world names. Consider the 99 names of Allah (with 'Abd' prefix for boys), names of the Prophet's family, and names with beautiful meanings praised in Islamic tradition.",
+  hindu: "Draw from the Vedas, Puranas, epics (Ramayana, Mahabharata), and Hindu deities. Include Sanskrit names, names of gods/goddesses (Shiva, Vishnu, Lakshmi, Durga, etc.), sages, and virtues. Consider regional traditions (Tamil, Bengali, Marathi, Gujarati, Punjabi, etc.) and astrological naming (Namkaran).",
+  buddhist: "Draw from Pali and Sanskrit Buddhist texts, names of Buddhas and Bodhisattvas, Buddhist virtues (compassion, wisdom, mindfulness), and names from Theravada and Mahayana traditions. Consider names meaning peace, enlightenment, and awakening.",
+  sikh: "Draw from the Guru Granth Sahib, names of the Sikh Gurus, Gurmukhi names, and Punjabi traditions. Many Sikh names are gender-neutral. Consider names ending in 'Singh' (for males) and 'Kaur' (for females), and virtues emphasized in Sikh teaching (equality, service, courage).",
+  orthodox: "Draw from Eastern Orthodox saints, biblical figures, Church Fathers, and Orthodox liturgical tradition. Include Greek, Russian, Serbian, Romanian, Ethiopian, and other Orthodox naming customs. Consider patron saints and names from the liturgical calendar.",
+};
+
+function getFaithGuidance(faith: string): string | null {
+  const lower = faith.toLowerCase().trim();
+  // Direct match
+  if (FAITH_GUIDANCE[lower]) return FAITH_GUIDANCE[lower];
+  // Partial / fuzzy match
+  for (const [key, guidance] of Object.entries(FAITH_GUIDANCE)) {
+    if (lower.includes(key) || key.includes(lower)) return guidance;
+  }
+  // Generic fallback for any faith not explicitly mapped
+  return `Draw deeply from ${faith} religious texts, spiritual leaders, saints/holy figures, sacred virtues, and the naming traditions specific to this faith. Names should carry genuine spiritual significance, not just generic appeal.`;
+}
+
 // Retry config for Z.ai free-tier rate limiting (429s are common)
 const MAX_RETRIES = 5;
 const INITIAL_BACKOFF_MS = 2000; // start at 2s
@@ -61,9 +167,13 @@ export function buildPrompt(req: AIGenerationRequest): { system: string; user: s
   if (fmtArray("siblings").length) sections.push(`Existing children: ${fmtArray("siblings").join(", ")}`);
   if (fmt("multiples") && fmt("multiples") !== "no") sections.push(`Naming: ${fmt("multiples")}`);
 
-  // Heritage
-  if (fmtArray("continents").length) sections.push(`Family regions: ${fmtArray("continents").join(", ")}`);
-  if (fmtArray("heritage").length) sections.push(`Specific cultures: ${fmtArray("heritage").join(", ")}`);
+  // Heritage — expand broad regions into ALL constituent countries/cultures
+  const continents = fmtArray("continents");
+  const heritage = fmtArray("heritage");
+  if (continents.length || heritage.length) {
+    const allRegions = expandRegions([...continents, ...heritage]);
+    sections.push(`Family heritage and cultures (be thorough — cover ALL of these, not just the obvious ones): ${allRegions}`);
+  }
   if (fmtArray("languages").length) sections.push(`Languages at home: ${fmtArray("languages").join(", ")}`);
   if (fmt("heritageStrength")) sections.push(`Heritage connection: ${fmt("heritageStrength")}`);
   if (fmt("namingTraditions")) sections.push(`Cultural naming traditions: ${fmt("namingTraditions")}`);
@@ -91,10 +201,14 @@ export function buildPrompt(req: AIGenerationRequest): { system: string; user: s
     sections.push(`Family origin notes: ${ft.originNotes}`);
   }
 
-  // Faith
-  if (fmt("faithPreference") && fmt("faithPreference") !== "no") {
-    sections.push(`Faith preference: ${fmt("faithPreference")}`);
+  // Faith — add deep guidance so the LLM layers in the religious tradition
+  const faithPref = fmt("faithPreference");
+  if (faithPref && faithPref !== "no") {
+    const specificFaith = fmt("specificFaith") || faithPref;
+    const guidance = getFaithGuidance(specificFaith);
+    sections.push(`Faith preference: ${faithPref}`);
     if (fmt("specificFaith")) sections.push(`Faith tradition: ${fmt("specificFaith")}`);
+    if (guidance) sections.push(`FAITH NAMING GUIDANCE: ${guidance}`);
     if (fmt("religiousTexts")) sections.push(`Sacred texts: ${fmt("religiousTexts")}`);
     if (fmt("spiritualMeaning")) sections.push(`Spiritual notes: ${fmt("spiritualMeaning")}`);
   }
@@ -150,12 +264,13 @@ You are generating ${count} name suggestions for a specific family. Quality over
 ## CRITICAL QUALITY RULES
 
 1. AVOID GENERIC NAMES. Do not default to the top 50 baby names (no Olivia, Emma, Liam, Noah, Ava, etc.) unless the parents explicitly asked for popular names. Dig deeper. Find names with real character.
-2. RESPECT HERITAGE. If they specified cultures or regions, at least 40% of names should have genuine roots in those cultures. Research real names from those traditions.
+2. EXHAUSTIVE HERITAGE COVERAGE. When parents list regions or cultures, you MUST draw names from ALL the countries and traditions listed — not just the obvious few. People are deeply proud of their heritage. If they say "Europe," that means Austrian, Scottish, Welsh, Portuguese, Greek, Polish, Hungarian, Icelandic, Basque, and every other European tradition — not just English/French/Irish. Spread names across the FULL list of cultures provided. Never unknowingly exclude a heritage.
 3. HONOR FAMILY THOUGHTFULLY. If they want to honor a relative, don't just suggest the exact name - find names that share roots, meanings, sounds, or first letters.
-4. DIVERSIFY. No two names should share the same origin, starting letter, or ending sound. Spread across origins, lengths, and popularity tiers.
-5. MATCH THE VIBE. If they asked for unique/rare names, don't give them common ones. If they asked for classic, don't give trendy. Read their preferences carefully.
-6. REAL MEANINGS. Provide accurate, specific etymological meanings. Not just "strong" or "beautiful" - give the actual linguistic root and what it meant to the people who first used it.
-7. PERSONALIZE THE WHY. The "why" field must reference THIS family's specific answers. Not "this is a strong name" but "this echoes your love of Irish heritage and your grandmother's name Bridget."
+4. LAYER IN FAITH. If the family has a faith or religious tradition, at least 30% of names should have genuine roots in that faith — biblical figures, saints, spiritual texts, religious virtues, or names with sacred meaning. The faith guidance provided below tells you exactly which traditions to draw from. Do not give secular names when a faith is specified.
+5. DIVERSIFY. No two names should share the same origin, starting letter, or ending sound. Spread across origins, lengths, and popularity tiers.
+6. MATCH THE VIBE. If they asked for unique/rare names, don't give them common ones. If they asked for classic, don't give trendy. Read their preferences carefully.
+7. REAL MEANINGS. Provide accurate, specific etymological meanings. Not just "strong" or "beautiful" - give the actual linguistic root and what it meant to the people who first used it.
+8. PERSONALIZE THE WHY. The "why" field must reference THIS family's specific answers. Not "this is a strong name" but "this echoes your love of Irish heritage and your grandmother's name Bridget."
 
 ## OUTPUT FORMAT
 
