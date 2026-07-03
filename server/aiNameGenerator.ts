@@ -292,27 +292,9 @@ Return a JSON object with a "names" array. Each object:
   "why": "1-2 sentences referencing THIS family's specific answers"
 }
 
-## EXAMPLE (this is the quality bar):
+Return ONLY a JSON object: { "names": [...] }. No other text.
 
-For a family wanting Irish heritage, nature themes, and uncommon names:
-{
-  "name": "Saoirse",
-  "gender": "girl",
-  "origins": ["Irish"],
-  "languages": ["Irish", "English"],
-  "meaning": "From the Irish word for 'freedom' or 'liberty' - became popular as a name during Ireland's independence movement, symbolizing the spirit of a free nation",
-  "meaningKeywords": ["freedom", "independence", "liberty", "Irish"],
-  "religionTags": [],
-  "vibes": ["classic", "strong", "international"],
-  "syllables": 2,
-  "variants": ["Searsy", "Saoirsa"],
-  "nicknames": ["Sasha", "Sair"],
-  "popularityTier": 4,
-  "pronunciationHint": "SEER-sha",
-  "why": "A deeply Irish name that embodies your connection to Irish heritage, with a meaning (freedom) that resonates with the natural, untamed spirit you want for your daughter."
-}
-
-Return ONLY a JSON object: { "names": [...] }. No other text.`;
+IMPORTANT: Do NOT include the name "Saoirse" or any other name used as an illustration in these instructions. Only return names generated for THIS specific family.`;
 
   const user = `Here is the family's naming profile:\n\n${sections.join("\n")}${excludeStr}\n\nGenerate ${count} exceptional, deeply personalized name suggestions. Every name should feel like it was chosen specifically for THIS family.`;
 
@@ -502,8 +484,23 @@ function parseLLMResponse(content: string): NameRecord[] {
     .filter((n): n is NameRecord => n !== null);
 }
 
+function cleanName(rawName: string): string {
+  let name = rawName.trim();
+  // Strip common LLM prefixes/leakage: "Name:", "1.", numbering, bullets, etc.
+  name = name.replace(/^\*?\s*(?:name\s*[:\-]\s*)/i, "");
+  name = name.replace(/^\*?\s*\d+[\.:\)]\s*/, "");
+  name = name.replace(/^[-\*•]\s*/, "");
+  // Strip trailing descriptions that leaked into the name field
+  // e.g. "Liam - a strong name" -> "Liam"
+  const dashIdx = name.search(/\s+[-–—]\s+[a-z]/);
+  if (dashIdx > 0) name = name.substring(0, dashIdx);
+  // Remove surrounding quotes, asterisks (markdown bold)
+  name = name.replace(/^["'""*]+/, "").replace(/["'""*]+$/, "");
+  return name.trim();
+}
+
 function normalizeName(raw: Record<string, unknown>, idx: number): NameRecord | null {
-  const name = String(raw.name || "").trim();
+  const name = cleanName(String(raw.name || ""));
   if (!name) return null;
 
   return {
