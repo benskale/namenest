@@ -5,9 +5,10 @@ import { ThemedText } from "@/components/ThemedText";
 import { TagChip } from "@/components/TagChip";
 import { ScoredName } from "@/models/types";
 import { Colors, Shadows, BorderRadius, Spacing } from "@/constants/theme";
+import { generateNameSummary } from "@/lib/nameSummary";
 
 const CARD_WIDTH = Math.min(Dimensions.get("window").width - 48, 320);
-const CARD_HEIGHT = 420;
+const CARD_HEIGHT = 460;
 
 interface NameCardProps {
   scoredName: ScoredName;
@@ -44,14 +45,21 @@ export function NameCard({ scoredName, onPress }: NameCardProps) {
           <ThemedText type="label" style={styles.reasonsLabel}>
             Why this name?
           </ThemedText>
-          {reasons.map((reason, index) => (
-            <View key={index} style={styles.reasonRow}>
-              <View style={styles.bullet} />
-              <ThemedText type="body" style={styles.reasonText}>
-                {reason}
-              </ThemedText>
+          <ThemedText type="body" style={styles.summaryText}>
+            {generateNameSummary(record)}
+          </ThemedText>
+          {reasons.length > 0 ? (
+            <View style={styles.reasonsList}>
+              {reasons.map((reason, index) => (
+                <View key={index} style={styles.reasonRow}>
+                  <View style={styles.bullet} />
+                  <ThemedText type="caption" style={styles.reasonText}>
+                    {reason}
+                  </ThemedText>
+                </View>
+              ))}
             </View>
-          ))}
+          ) : null}
         </View>
       </View>
     </Pressable>
@@ -99,23 +107,32 @@ const styles = StyleSheet.create({
   },
   reasonsLabel: {
     color: Colors.light.textSecondary,
+    marginBottom: Spacing.sm,
+  },
+  summaryText: {
+    color: Colors.light.text,
+    fontStyle: "italic",
+    lineHeight: 20,
     marginBottom: Spacing.md,
+  },
+  reasonsList: {
+    marginTop: Spacing.xs,
   },
   reasonRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.xs,
   },
   bullet: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
     backgroundColor: Colors.light.primary,
-    marginTop: 6,
+    marginTop: 5,
     marginRight: Spacing.sm,
   },
   reasonText: {
     flex: 1,
-    color: Colors.light.text,
+    color: Colors.light.textSecondary,
   },
 });
