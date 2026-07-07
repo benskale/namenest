@@ -6,6 +6,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { TagChip } from "@/components/TagChip";
 import { ScoredName } from "@/models/types";
 import { Colors, Shadows, BorderRadius, Spacing } from "@/constants/theme";
+import { generateNameSummary } from "@/lib/nameSummary";
 
 const CARD_WIDTH = Math.min(Dimensions.get("window").width - 48, 320);
 const CARD_HEIGHT = 500;
@@ -18,17 +19,8 @@ interface NameCardProps {
 export function NameCard({ scoredName, onPress }: NameCardProps) {
   const { record, reasons } = scoredName;
 
-  // Build a prominent meaning/description line
-  const meaningText =
-    record.meaning ||
-    (record.meaningKeywords.length > 0
-      ? record.meaningKeywords.slice(0, 3).join(", ")
-      : "");
-
-  // Origin prefix for the meaning line
-  const originPrefix = record.origins.length > 0
-    ? record.origins.slice(0, 2).join("/")
-    : "";
+  // Natural-language teaser blurb (1-2 sentences) — the hook
+  const summary = generateNameSummary(record);
 
   // Top 2 reasons as quick highlights (truncated for card space)
   const topReasons = reasons.slice(0, 2);
@@ -40,25 +32,20 @@ export function NameCard({ scoredName, onPress }: NameCardProps) {
         <ThemedText type="titleLarge" style={styles.name}>
           {record.name}
         </ThemedText>
-        <ThemedText type="caption" style={styles.pronunciation}>
-          {record.pronunciationHint}
-        </ThemedText>
-
-        {/* Meaning - prominent, right under the name */}
-        {meaningText ? (
-          <View style={styles.meaningSection}>
-            {originPrefix ? (
-              <ThemedText type="body" style={styles.originLine}>
-                {originPrefix} origin
-              </ThemedText>
-            ) : null}
-            <ThemedText type="body" style={styles.meaningLine}>
-              {meaningText}
-            </ThemedText>
-          </View>
+        {record.pronunciationHint ? (
+          <ThemedText type="caption" style={styles.pronunciation}>
+            {record.pronunciationHint}
+          </ThemedText>
         ) : null}
 
-        {/* Quick highlights - why this name */}
+        {/* Teaser blurb — the hook */}
+        <View style={styles.blurbSection}>
+          <ThemedText type="body" style={styles.blurb}>
+            {summary}
+          </ThemedText>
+        </View>
+
+        {/* Quick highlights — why this name matched */}
         {topReasons.length > 0 ? (
           <View style={styles.highlightsSection}>
             {topReasons.map((reason, index) => (
@@ -119,25 +106,17 @@ const styles = StyleSheet.create({
     color: Colors.light.textTertiary,
     marginTop: Spacing.sm,
   },
-  meaningSection: {
-    marginTop: Spacing.lg,
+  blurbSection: {
+    marginTop: Spacing.xl,
     alignItems: "center",
     width: "100%",
   },
-  originLine: {
-    color: Colors.light.primary,
-    fontWeight: "600",
-    fontSize: 12,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: Spacing.xs,
-  },
-  meaningLine: {
+  blurb: {
     textAlign: "center",
     color: Colors.light.text,
-    fontStyle: "italic",
-    lineHeight: 21,
+    lineHeight: 23,
     fontSize: 15,
+    fontStyle: "italic",
   },
   highlightsSection: {
     marginTop: Spacing.lg,
