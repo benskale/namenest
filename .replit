@@ -7,7 +7,7 @@ modules = ["nodejs-20"]
 channel = "stable-23_11"
 
 [deployment]
-run = ["sh", "-c", "npm run server:prod"]
+run = ["sh", "-c", "npm run server:build && npm run server:prod"]
 
 [[ports]]
 localPort = 5000
