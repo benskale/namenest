@@ -29,7 +29,10 @@ export default function RootStackNavigator() {
   }
 
   return (
-    <Stack.Navigator screenOptions={screenOptions}>
+    <Stack.Navigator
+      key={hasCompletedOnboarding ? "main-app" : "onboarding"}
+      screenOptions={screenOptions}
+    >
       {!hasCompletedOnboarding ? (
         <>
           <Stack.Screen

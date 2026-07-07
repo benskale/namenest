@@ -48,7 +48,6 @@ export default function SettingsScreen() {
           style: "destructive",
           onPress: () => {
             resetAllData();
-            navigation.reset({ index: 0, routes: [{ name: "Welcome" }] });
           },
         },
       ]
@@ -146,8 +145,8 @@ export default function SettingsScreen() {
             Reset
           </ThemedText>
           <Pressable style={styles.dangerRow} onPress={handleStartOver}>
-            <Feather name="refresh-ccw" size={18} color={Colors.light.no} />
-            <ThemedText type="body" style={{ color: Colors.light.no, marginLeft: Spacing.sm }}>
+            <Feather name="refresh-ccw" size={18} color={Colors.light.accentNo} />
+            <ThemedText type="body" style={{ color: Colors.light.accentNo, marginLeft: Spacing.sm }}>
               Start Over
             </ThemedText>
           </Pressable>
